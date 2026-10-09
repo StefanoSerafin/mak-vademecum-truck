@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Vademecum Truck</title>
+<style id="gate-css">
+  :root{--g-bg:#f6f5f2;--g-card:#fff;--g-ink:#1b1d21;--g-soft:#5d636d;--g-line:#dcd9d2;--g-accent:#c8102e}
+  @media (prefers-color-scheme: dark){:root{--g-bg:#14161a;--g-card:#1c1f25;--g-ink:#e9eaec;--g-soft:#a0a6b0;--g-line:#30343c;--g-accent:#ff5a70}}
+  html,body{margin:0}
+  body{background:var(--g-bg);color:var(--g-ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif}
+  #gate{max-width:380px;margin:18vh auto 0;padding:24px 20px;background:var(--g-card);border:1px solid var(--g-line);border-radius:12px;box-sizing:border-box}
+  #gate-wrap{padding:0 16px}
+  #gate h1{font-size:20px;margin:0 0 4px}
+  #gate p.lead{font-size:14px;color:var(--g-soft);margin:0 0 14px}
+  #gate .row{display:flex;gap:8px}
+  #gate input[type="password"]{flex:1;min-width:0;font-size:18px;padding:10px 12px;border:1px solid var(--g-line);border-radius:8px;background:var(--g-bg);color:var(--g-ink)}
+  #gate button{font-size:16px;font-weight:600;padding:10px 16px;border:0;border-radius:8px;background:var(--g-accent);color:#fff}
+  #gate label.remember{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13.5px;color:var(--g-soft)}
+  #gate-msg{margin:12px 0 0;font-size:13.5px;min-height:1.2em}
+  #gate-msg.err{color:var(--g-accent)}
+  #gate-msg.wait{color:var(--g-soft)}
+</style>
+</head>
+<body>
+<div id="gate-wrap">
+  <section id="gate">
+    <h1>Vademecum Truck</h1>
+    <p class="lead">Documento riservato. Inserisci il PIN per consultarlo.</p>
+    <div class="row">
+      <input type="password" id="pin" inputmode="numeric" autocomplete="off" aria-label="PIN">
+      <button type="button" id="go">Apri</button>
+    </div>
+    <label class="remember"><input type="checkbox" id="remember" checked> Ricorda su questo dispositivo</label>
+    <p id="gate-msg" role="alert"></p>
+  </section>
+</div>
+<div id="app" hidden></div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+  var BLOB = /*DATA_BLOB*/;
+  var META = /*BUILD_META*/;
+  var GENERATO = /*GENERATO*/;
+  var LS_KEY = "vademecum_truck_pin";
+  function $(id){ return document.getElementById(id); }
+  var gateMsg = $("gate-msg");
+
+  function b64(s){
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function decrypt(pin){
+    if(!(window.crypto && window.crypto.subtle)){
+      return Promise.reject(new Error("nosubtle"));
+    }
+    var parts = BLOB.split("."), salt = b64(parts[0]), iv = b64(parts[1]), ct = b64(parts[2]);
+    var enc = new TextEncoder().encode(pin);
+    return crypto.subtle.importKey("raw", enc, "PBKDF2", false, ["deriveKey"])
+      .then(function(km){
+        return crypto.subtle.deriveKey(
+          {name:"PBKDF2", salt:salt, iterations:META.iter, hash:"SHA-256"},
+          km, {name:"AES-GCM", length:256}, false, ["decrypt"]);
+      })
+      .then(function(key){
+        return crypto.subtle.decrypt({name:"AES-GCM", iv:iv}, key, ct);
+      })
+      .then(function(buf){
+        return JSON.parse(new TextDecoder().decode(buf));
+      });
+  }
+
+  function show(data){
+    var st = document.createElement("style");
+    st.textContent = data.css;
+    document.head.appendChild(st);
+    var old = $("gate-css"); if(old) old.parentNode.removeChild(old);
+    $("gate-wrap").hidden = true;
+    var app = $("app");
+    app.innerHTML = data.body;
+    app.hidden = false;
+    if(location.hash){
+      var el = document.getElementById(location.hash.slice(1));
+      if(el) el.scrollIntoView();
+    }
+  }
+
+  function tryUnlock(pin, fromStorage){
+    gateMsg.className = "wait";
+    gateMsg.textContent = "Sblocco…";
+    decrypt(pin).then(function(data){
+      if($("remember").checked){
+        try { localStorage.setItem(LS_KEY, pin); } catch(e){}
+      }
+      show(data);
+    }).catch(function(err){
+      if(err && err.message === "nosubtle"){
+        gateMsg.className = "err";
+        gateMsg.textContent = "Apri la pagina da https:// (GitHub Pages): la decifratura richiede una connessione sicura.";
+        return;
+      }
+      if(fromStorage){ try { localStorage.removeItem(LS_KEY); } catch(e){} }
+      gateMsg.className = fromStorage ? "" : "err";
+      gateMsg.textContent = fromStorage ? "" : "PIN errato.";
+    });
+  }
+
+  $("go").addEventListener("click", function(){
+    var pin = $("pin").value.trim();
+    if(pin) tryUnlock(pin, false);
+  });
+  $("pin").addEventListener("keydown", function(e){
+    if(e.key === "Enter"){ var pin = $("pin").value.trim(); if(pin) tryUnlock(pin, false); }
+  });
+
+  var saved = null;
+  try { saved = localStorage.getItem(LS_KEY); } catch(e){}
+  if(saved) tryUnlock(saved, true);
+});
+</script>
+</body>
+</html>
