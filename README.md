@@ -12,7 +12,13 @@ LIVE: https://stefanoserafin.github.io/mak-vademecum-truck/
 - Nel browser il PIN decifra il blob con WebCrypto; con «Ricorda su questo dispositivo» il PIN resta nel localStorage di quel dispositivo.
 - Stesso schema e stesso PIN di `mak-distanziali-xilema`.
 
+## Disegni e infografiche
+
+Le 25 figure (SVG inline, senza script) sono generate da `../Trk/vademecum_figure.py`, che le inserisce nel documento in chiaro tra marcatori `<!--FIG nome-->`. Lo script è idempotente: si può rilanciare dopo ogni modifica. Resta fuori dal repo perché contiene i dati riservati dei grafici.
+
 ## Aggiornare
+
+    python3 ../Trk/vademecum_figure.py   # solo se cambiano le figure
 
     XILEMA_PIN='****' python3 build.py
     git add index.html && git commit -m "aggiornamento" && git push
